@@ -18,10 +18,34 @@ const Search = () => {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const { protocol, pathname } = window.location;
-      let { host } = window.location;
-      host = host.includes('localhost') ? 'localhost:8000' : host;
-      const ws_uri = `${protocol === 'https:' ? 'wss:' : 'ws:'}//${host}${pathname}ws`;
+      const { pathname } = window.location;
+      
+      // Use the NEXT_PUBLIC_BACKEND_URL environment variable if set
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+      
+      let protocol, host;
+      
+      if (backendUrl) {
+        // Parse the backendUrl to extract protocol and host
+        try {
+          const url = new URL(backendUrl);
+          protocol = url.protocol;
+          host = url.host;
+        } catch (error) {
+          console.error('Invalid NEXT_PUBLIC_BACKEND_URL:', backendUrl);
+          // Fallback to default behavior if URL is invalid
+          protocol = window.location.protocol;
+          host = window.location.host;
+        }
+      } else {
+        // Fallback to original logic if environment variable is not set
+        protocol = window.location.protocol;
+        host = window.location.host;
+        host = host.includes('localhost') ? 'localhost:8000' : host;
+      }
+      
+      const ws_protocol = protocol === 'https:' ? 'wss:' : 'ws:';
+      const ws_uri = `${ws_protocol}//${host}${pathname}ws`;
       
       const newSocket = new WebSocket(ws_uri);
       setSocket(newSocket);
