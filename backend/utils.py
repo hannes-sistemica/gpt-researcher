@@ -55,7 +55,7 @@ async def write_md_to_pdf(text: str, filename: str = "") -> str:
         print(f"Error in converting Markdown to PDF: {e}")
         return ""
 
-    encoded_file_path = urllib.parse.quote(f"{filename[:60]}.md")
+    encoded_file_path = urllib.parse.quote(f"{filename[:60]}.pdf")
     return encoded_file_path
 
 async def write_md_to_word(text: str, filename: str = "") -> str:
