@@ -4,7 +4,7 @@ import re
 import time
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, File, UploadFile, Header, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -18,6 +18,7 @@ from multi_agents.main import run_research_task
 from gpt_researcher.document.document import DocumentLoader
 from gpt_researcher.master.actions import stream_output
 
+REPORTS_PATH = "outputs"
 
 class ResearchRequest(BaseModel):
     task: str
@@ -47,13 +48,20 @@ app.mount("/static", StaticFiles(directory="./frontend/static"), name="static")
 
 templates = Jinja2Templates(directory="./frontend")
 
+class MockWebSocket:
+    async def send_json(self, data):
+        print(f"Mock WebSocket send_json: {data}")
+
+    async def send_text(self, data):
+        print(f"Mock WebSocket send_text: {data}")
+
 manager = WebSocketManager()
 
 # Dynamic directory for outputs once first research is run
 @app.on_event("startup")
 def startup_event():
-    os.makedirs("outputs", exist_ok=True)
-    app.mount("/outputs", StaticFiles(directory="outputs"), name="outputs")
+    os.makedirs(REPORTS_PATH, exist_ok=True)
+    app.mount("/" + REPORTS_PATH, StaticFiles(directory=REPORTS_PATH), name=REPORTS_PATH)
 
 
 @app.get("/")
@@ -128,7 +136,7 @@ async def report_endpoint(request: Request):
         json_data = await request.json()
         task = json_data.get("task")
         report_type = json_data.get("report_type")
-        source_urls = json_data.get("source_urls")
+        source_urls = json_data.get("source_urls", [])
         tone = json_data.get("tone")
         headers = json_data.get("headers", {})
         report_source = json_data.get("report_source")
@@ -141,9 +149,13 @@ async def report_endpoint(request: Request):
         filename = f"task_{int(time.time())}_{task}"
         sanitized_filename = sanitize_filename(filename)
 
+        mock_websocket = MockWebSocket()
         report = await manager.start_streaming(
-            task, report_type, report_source, source_urls, tone, None, headers
+            task, report_type, report_source, source_urls, tone, mock_websocket, headers
         )
+
+        if report is None:
+            raise HTTPException(status_code=500, detail="Failed to generate report")
 
         # Ensure report is a string
         if not isinstance(report, str):
@@ -165,7 +177,7 @@ async def report_endpoint(request: Request):
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid JSON")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
 @app.post("/api/multi_agents")
 async def run_multi_agents():
@@ -271,3 +283,17 @@ async def delete_file(filename: str):
     else:
         print(f"File not found: {file_path}")
         return JSONResponse(status_code=404, content={"message": "File not found"})
+
+@app.get("/reports/")
+async def list_reports():
+    files = os.listdir(REPORTS_PATH)
+    print(f"Reports in {REPORTS_PATH}: {files}")
+    return {"reports": files}
+
+@app.get("/reports/{filename}")
+async def download_report(filename: str):
+    file_path = os.path.join(REPORTS_PATH, filename)
+    if os.path.exists(file_path):
+        return FileResponse(file_path, filename=filename, media_type='application/octet-stream')
+    else:
+        raise HTTPException(status_code=404, detail="Report not found")
