@@ -1,12 +1,7 @@
 from __future__ import annotations
 
 import traceback
-import asyncio
 from pathlib import Path
-import time
-import random
-import string
-import os
 
 from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright, Browser, Page
@@ -104,9 +99,32 @@ class BrowserScraper:
         return text
 
     def get_text(self, soup: BeautifulSoup) -> str:
+        """Get the relevant text from the soup with improved filtering"""
+        text_elements = []
+        tags = ["h1", "h2", "h3", "h4", "h5", "p", "li", "div", "span"]
 
-    # This method remains the same as in the original code
-    # ...
+        for element in soup.find_all(tags):
+            # Skip empty elements
+            if not element.text.strip():
+                continue
+
+            # Skip elements with very short text (likely buttons or links)
+            if len(element.text.split()) < 3:
+                continue
+
+            # Check if the element is likely to be navigation or a menu
+            parent_classes = element.parent.get('class', [])
+            if any(cls in ['nav', 'menu', 'sidebar', 'footer'] for cls in parent_classes):
+                continue
+
+            # Remove excess whitespace and join lines
+            cleaned_text = ' '.join(element.text.split())
+
+            # Add the cleaned text to our list of elements
+            text_elements.append(cleaned_text)
+
+        # Join all text elements with newlines
+        return '\n\n'.join(text_elements)
 
     async def _scroll_to_bottom(self):
         last_height = await self.page.evaluate("document.body.scrollHeight")
