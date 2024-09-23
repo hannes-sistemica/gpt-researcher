@@ -3,7 +3,7 @@ import os
 import re
 import time
 
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, File, UploadFile, Header
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, File, UploadFile, Header, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -120,6 +120,50 @@ async def websocket_endpoint(websocket: WebSocket):
                     print("Error: not enough parameters provided.")
     except WebSocketDisconnect:
         await manager.disconnect(websocket)
+
+
+@app.post("/report")
+async def report_endpoint(request: Request):
+    try:
+        json_data = await request.json()
+        task = json_data.get("task")
+        report_type = json_data.get("report_type")
+        source_urls = json_data.get("source_urls")
+        tone = json_data.get("tone")
+        headers = json_data.get("headers", {})
+        report_source = json_data.get("report_source")
+
+        if not (task and report_type):
+            raise HTTPException(status_code=400, detail="Not enough parameters provided")
+
+        filename = f"task_{int(time.time())}_{task}"
+        sanitized_filename = sanitize_filename(filename)
+
+        report = await manager.start_streaming(
+            task, report_type, report_source, source_urls, tone, None, headers
+        )
+
+        # Ensure report is a string
+        if not isinstance(report, str):
+            report = str(report)
+
+        # Saving report in different formats
+        pdf_path = await write_md_to_pdf(report, sanitized_filename)
+        docx_path = await write_md_to_word(report, sanitized_filename)
+        md_path = await write_text_to_md(report, sanitized_filename)
+
+        return JSONResponse({
+            "output": {
+                "pdf": pdf_path,
+                "docx": docx_path,
+                "md": md_path,
+            }
+        })
+
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/multi_agents")
 async def run_multi_agents():
