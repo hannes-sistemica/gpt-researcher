@@ -133,8 +133,10 @@ async def report_endpoint(request: Request):
         headers = json_data.get("headers", {})
         report_source = json_data.get("report_source")
 
-        if not (task and report_type):
-            raise HTTPException(status_code=400, detail="Not enough parameters provided")
+        if not task:
+            raise HTTPException(status_code=400, detail="Task is required")
+        if not report_type:
+            raise HTTPException(status_code=400, detail="Report type is required")
 
         filename = f"task_{int(time.time())}_{task}"
         sanitized_filename = sanitize_filename(filename)
