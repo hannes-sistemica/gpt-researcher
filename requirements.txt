@@ -30,6 +30,7 @@ json_repair
 json5
 loguru
 duckduckgo_search==6.1.9
+selenium
 
 # uncomment for testing
 # pytest
